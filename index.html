@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>NUMSHA</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root { --green:#06c755; --red:#e5484d; --amber:#d9900b; --blue:#3b82f6; --ink:#1c1c1e;
+          --muted:#6b7280; --bg:#f4f5f7; --line:#eceef1; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Sukhumvit Set","Noto Sans Thai",sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:520px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:20px; margin:4px 0 2px; }
+  .sub { color:var(--muted); font-size:14px; margin-bottom:16px; }
+  .card { background:#fff; border-radius:16px; padding:18px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .clock { font-size:44px; font-weight:700; text-align:center; letter-spacing:1px; }
+  .date { text-align:center; color:var(--muted); font-size:14px; }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:6px 0; font-size:15px; }
+  .row span:first-child { color:var(--muted); }
+  .btns { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button { border:0; border-radius:14px; padding:18px 10px; font-size:17px; font-weight:700; color:#fff; cursor:pointer; font-family:inherit; }
+  .in { background:var(--green); } .out { background:var(--blue); } .full { width:100%; background:var(--green); }
+  .ghost { background:#fff; color:var(--ink); border:1px solid #d1d5db; padding:12px; font-size:15px; width:100%; margin-top:12px; font-weight:600; }
+  button:disabled { opacity:.45; }
+  label { display:block; font-size:14px; color:var(--muted); margin:12px 0 4px; }
+  input, select, textarea { width:100%; padding:14px; font-size:17px; border:1px solid #d1d5db; border-radius:12px; font-family:inherit; background:#fff; }
+  input.up { text-transform:uppercase; }
+  textarea { font-size:15px; min-height:64px; }
+  .money { text-align:right; font-variant-numeric:tabular-nums; }
+  .total { display:flex; justify-content:space-between; align-items:baseline; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+  .total b { font-size:28px; }
+  .result { text-align:center; }
+  .result .big { font-size:40px; }
+  .ok { color:var(--green); } .bad { color:var(--red); } .warn { color:var(--amber); }
+  .msg { font-size:15px; color:var(--muted); text-align:center; margin-top:10px; }
+  .hide { display:none !important; }
+  .tag { display:inline-block; font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; margin-left:6px; vertical-align:middle; }
+  .chk { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); margin-top:12px; }
+  .chk input { width:20px; height:20px; padding:0; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
+  .stat { background:#fff; border-radius:12px; padding:10px 6px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .stat b { display:block; font-size:22px; }
+  .stat span { font-size:12px; color:var(--muted); }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; overflow-x:auto; }
+  .tab { flex:0 0 auto; padding:8px 14px; border-radius:999px; background:#fff; border:1px solid #d1d5db; font-size:14px; font-weight:600; color:var(--ink); }
+  .tab.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .br { background:#fff; border-radius:14px; padding:12px 14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .br h3 { margin:0 0 6px; font-size:15px; display:flex; justify-content:space-between; gap:8px; }
+  .br h3 small { color:var(--muted); font-weight:400; white-space:nowrap; }
+  .emp { display:flex; justify-content:space-between; gap:8px; padding:7px 0; border-top:1px solid var(--line); font-size:14px; }
+  .emp:first-of-type { border-top:0; }
+  .st { font-weight:700; white-space:nowrap; text-align:right; }
+  .st small { display:block; font-weight:400; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== หน้าลงเวลา ===== -->
+  <div id="staffView">
+    <h1>ลงเวลาทำงาน</h1>
+    <div class="sub" id="hello">กำลังโหลด…</div>
+
+    <div class="card">
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="today"></div>
+    </div>
+
+    <div class="card hide" id="regBox">
+      <b>ลงทะเบียนครั้งแรก</b>
+      <div class="msg" style="text-align:left;margin-top:6px">กรอกรหัสพนักงานที่ได้รับจากแอดมิน (ทำครั้งเดียว)</div>
+      <input id="empCode" class="up" placeholder="เช่น EMP005" autocomplete="off">
+      <button class="full" id="regBtn" style="margin-top:12px">ลงทะเบียน</button>
+    </div>
+
+    <div class="hide" id="mainBox">
+      <div class="card">
+        <div class="row"><span>พนักงาน</span><b id="empName"></b></div>
+        <div class="row"><span>สาขาประจำ</span><b id="empBranch"></b></div>
+        <div class="row"><span id="lblIn">เข้างานวันนี้</span><b id="tIn">-</b></div>
+        <div class="row"><span id="lblOut">ออกงานวันนี้</span><b id="tOut">-</b></div>
+      </div>
+
+      <div class="btns">
+        <button class="in" id="btnIn">เข้างาน</button>
+        <button class="out" id="btnOut">ออกงาน</button>
+      </div>
+      <button class="ghost hide" id="btnSales">💰 แจ้งยอดขาย</button>
+      <button class="ghost hide" id="btnAdmin">📊 สถานะวันนี้ทุกสาขา</button>
+    </div>
+
+    <div class="card result hide" id="resultBox" style="margin-top:14px"></div>
+  </div>
+
+  <!-- ===== หน้าแจ้งยอดขาย ===== -->
+  <div id="salesView" class="hide">
+    <h1>แจ้งยอดขาย</h1>
+    <div class="sub" id="salesSub"></div>
+    <div class="card">
+      <label for="sDate">วันที่ขาย</label>
+      <input type="date" id="sDate">
+      <label for="sBranch">สาขา</label>
+      <select id="sBranch"></select>
+      <label for="sCash">เงินสด</label>
+      <input type="number" id="sCash" class="money" inputmode="numeric" min="0" step="1" placeholder="0">
+      <label for="sTransfer">เงินโอน</label>
+      <input type="number" id="sTransfer" class="money" inputmode="numeric" min="0" step="1" placeholder="0">
+      <label for="sCredit">บัตรเครดิต</label>
+      <input type="number" id="sCredit" class="money" inputmode="numeric" min="0" step="1" placeholder="0">
+      <label for="sNote">หมายเหตุ (ถ้ามี)</label>
+      <textarea id="sNote" placeholder="เช่น ห้างปิดปรับปรุง"></textarea>
+      <label class="chk"><input type="checkbox" id="sZero"> วันนี้ขายไม่ได้จริง ยืนยันยอด 0</label>
+      <div class="total"><span>ยอดรวม</span><b id="sTotal">0</b></div>
+    </div>
+    <button class="full" id="sSubmit">ส่งยอดขาย</button>
+    <button class="ghost" id="sBack">← กลับหน้าลงเวลา</button>
+    <div class="card result hide" id="sResult" style="margin-top:14px"></div>
+  </div>
+
+  <!-- ===== หน้าแอดมิน ===== -->
+  <div id="adminView" class="hide">
+    <h1>สถานะวันนี้</h1>
+    <div class="sub" id="adminSub"></div>
+    <div class="stats" id="stats"></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="adminList"></div>
+    <button class="ghost" id="btnRefresh">🔄 รีเฟรช</button>
+    <button class="ghost" id="btnBack">← กลับหน้าลงเวลา</button>
+    <button class="ghost hide" id="btnClose">ปิด</button>
+  </div>
+
+  <div class="msg" id="status"></div>
+</div>
+
+<script>
+  /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
+  const LIFF_ID = '2011770140-oH5cwmNX';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
+  /* ================================== */
+
+  const $ = id => document.getElementById(id);
+  const show = (id, on = true) => $(id).classList.toggle('hide', !on);
+  const setStatus = t => $('status').textContent = t || '';
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const baht = n => Number(n || 0).toLocaleString('th-TH');
+  let me = null, adminData = null, adminTab = 'problem';
+
+  function tick() {
+    const now = new Date();
+    $('clock').textContent = now.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Bangkok' });
+    $('today').textContent = now.toLocaleDateString('th-TH', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Asia/Bangkok' });
+  }
+  setInterval(tick, 1000); tick();
+
+  async function api(payload) {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ idToken: liff.getIDToken() }, payload))
+    });
+    const data = await res.json();
+    if (data.error === 'TOKEN_INVALID') {
+      try { liff.login({ redirectUri: location.href }); } catch (e) {}
+      throw new Error('เซสชันหมดอายุ กำลังเข้าสู่ระบบใหม่…');
+    }
+    return data;
+  }
+
+  function getPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('อุปกรณ์นี้ไม่รองรับ GPS'));
+      navigator.geolocation.getCurrentPosition(resolve, err => {
+        const m = { 1:'ไม่ได้อนุญาตให้ใช้ตำแหน่ง กรุณาเปิดสิทธิ์ตำแหน่งให้ LINE ในการตั้งค่ามือถือ',
+                    2:'หาตำแหน่งไม่ได้ ลองออกไปใกล้ประตู/หน้าร้านแล้วลองใหม่',
+                    3:'หาตำแหน่งนานเกินไป กรุณาลองใหม่' };
+        reject(new Error(m[err.code] || 'หาตำแหน่งไม่ได้'));
+      }, { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+    });
+  }
+
+  /* ---------- ลงเวลา ---------- */
+  async function loadStatus() {
+    setStatus('กำลังตรวจสอบข้อมูล…');
+    const s = await api({ action: 'status' });
+    setStatus('');
+    if (!s.ok) throw new Error(s.error);
+    me = s;
+    if (!s.registered) {
+      $('hello').textContent = 'สวัสดี ' + (s.displayName || '');
+      show('regBox'); show('mainBox', false);
+      return;
+    }
+    $('hello').textContent = 'สวัสดี ' + s.name;
+    $('empName').innerHTML = esc(s.name) + ' (' + esc(s.empCode) + ')';
+    if (s.adminOnly) { $('empName').innerHTML = esc(s.name); openAdmin(); return; }
+    $('empBranch').innerHTML = s.isFloat ? 'วิ่งแทนหลายสาขา<span class="tag">FLOAT</span>' : esc(s.homeBranchName || s.homeBranch || '-');
+    $('lblIn').textContent = s.isFloat ? 'เข้างานล่าสุด' : 'เข้างานวันนี้';
+    $('lblOut').textContent = s.isFloat ? 'ออกงานล่าสุด' : 'ออกงานวันนี้';
+    $('tIn').textContent = s.todayIn ? s.todayIn + ' น.' : '-';
+    $('tOut').textContent = s.todayOut ? s.todayOut + ' น.' : '-';
+    $('btnIn').disabled = s.isFloat ? false : !!s.todayIn;
+    $('btnOut').disabled = s.isFloat ? false : !!s.todayOut;
+    show('btnAdmin', !!s.isAdmin);
+    show('btnSales', !!s.salesEnabled);
+    show('regBox', false); show('mainBox');
+  }
+
+  async function register() {
+    const code = $('empCode').value.trim();
+    if (!code) return setStatus('กรุณากรอกรหัสพนักงาน');
+    $('regBtn').disabled = true; setStatus('กำลังลงทะเบียน…');
+    try {
+      const r = await api({ action: 'register', empCode: code });
+      if (!r.ok) throw new Error(r.error);
+      await loadStatus();
+    } catch (e) { setStatus(e.message); }
+    $('regBtn').disabled = false;
+  }
+
+  function restoreButtons() {
+    if (!me) return;
+    $('btnIn').disabled = me.isFloat ? false : !!me.todayIn;
+    $('btnOut').disabled = me.isFloat ? false : !!me.todayOut;
+  }
+
+  async function checkin(type) {
+    $('btnIn').disabled = $('btnOut').disabled = true;
+    show('resultBox', false);
+    try {
+      setStatus('กำลังหาตำแหน่ง GPS…');
+      const pos = await getPosition();
+      setStatus('กำลังบันทึก…');
+      const r = await api({ action:'checkin', type:type,
+        lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+      setStatus('');
+      renderResult(r);
+      await loadStatus();
+    } catch (e) {
+      setStatus(e.message);
+      restoreButtons();
+    }
+  }
+
+  function renderResult(r) {
+    const box = $('resultBox');
+    if (!r.ok) {
+      box.innerHTML = '<div class="big">⚠️</div><b class="bad">' + esc(r.error) + '</b>';
+    } else {
+      const area = r.inArea
+        ? '<div class="ok">✅ อยู่ในพื้นที่สาขา ' + esc(r.branch) + ' (ห่าง ' + r.distance + ' ม.)</div>'
+        : '<div class="bad">❌ อยู่นอกพื้นที่ (สาขาใกล้สุด: ' + esc(r.branch) + ' ห่าง ' + r.distance + ' ม.)</div>';
+      let late = '';
+      if (r.type === 'IN' && r.lateMin !== '') {
+        late = r.lateMin > 0
+          ? '<div class="warn">สาย ' + r.lateMin + ' นาที (ต้องเข้า ' + r.expected + ' น.)</div>'
+          : '<div class="ok">ตรงเวลา (ต้องเข้า ' + r.expected + ' น.)</div>';
+      }
+      if (r.type === 'OUT' && r.earlyMin !== '') {
+        late = r.earlyMin > 0
+          ? '<div class="warn">ออกก่อนเวลา ' + r.earlyMin + ' นาที (ปิด ' + r.expected + ' น.)</div>'
+          : '<div class="ok">ออกตามเวลา</div>';
+      }
+      const other = r.inArea && !r.atHome && !r.isFloat ? '<div class="warn">หมายเหตุ: ไม่ใช่สาขาประจำ</div>' : '';
+      box.innerHTML = '<div class="big">' + (r.inArea ? '✅' : '📍') + '</div>'
+        + '<b>บันทึก' + r.label + ' ' + r.time + ' น.</b>' + area + late + other;
+    }
+    show('resultBox');
+  }
+
+  /* ---------- แจ้งยอดขาย ---------- */
+  function openSales() {
+    show('staffView', false); show('salesView'); show('sResult', false); setStatus('');
+    const sel = $('sBranch');
+    sel.innerHTML = (me.branches || []).map(b =>
+      '<option value="' + esc(b.code) + '"' + (b.code === me.homeBranch ? ' selected' : '') + '>'
+      + esc(b.code) + ' · ' + esc(b.name) + '</option>').join('');
+    $('sDate').value = me.today;
+    $('sDate').max = me.today;
+    const min = new Date(me.today + 'T00:00:00');
+    min.setDate(min.getDate() - (me.salesBackDays || 3));
+    $('sDate').min = min.toISOString().slice(0, 10);
+    $('salesSub').textContent = 'ย้อนหลังได้ไม่เกิน ' + (me.salesBackDays || 3) + ' วัน · ส่งซ้ำวันเดิมจะทับของเดิมให้';
+    ['sCash','sTransfer','sCredit'].forEach(id => $(id).value = '');
+    $('sNote').value = ''; $('sZero').checked = false;
+    sumTotal();
+  }
+  function sumTotal() {
+    const t = ['sCash','sTransfer','sCredit'].reduce((a, id) => a + (Number($(id).value) || 0), 0);
+    $('sTotal').textContent = baht(t);
+    return t;
+  }
+  async function submitSales() {
+    const total = sumTotal();
+    if (total <= 0 && !$('sZero').checked) return setStatus('ยอดรวมเป็น 0 — ถ้าขายไม่ได้จริง กรุณาติ๊กยืนยัน');
+    $('sSubmit').disabled = true; setStatus('กำลังส่ง…');
+    try {
+      const r = await api({ action:'sales',
+        saleDate: $('sDate').value, branch: $('sBranch').value,
+        cash: Number($('sCash').value) || 0, transfer: Number($('sTransfer').value) || 0,
+        credit: Number($('sCredit').value) || 0, note: $('sNote').value,
+        allowZero: $('sZero').checked });
+      setStatus('');
+      const box = $('sResult');
+      if (!r.ok) box.innerHTML = '<div class="big">⚠️</div><b class="bad">' + esc(r.error) + '</b>';
+      else box.innerHTML = '<div class="big">✅</div><b>' + (r.updated ? 'แก้ไขยอดเดิมแล้ว' : 'บันทึกยอดขายแล้ว') + '</b>'
+        + '<div class="msg">' + esc(r.branchName) + ' · ' + esc(r.date) + '</div>'
+        + '<div class="total"><span>ยอดรวม</span><b>' + baht(r.total) + '</b></div>';
+      show('sResult');
+    } catch (e) { setStatus(e.message); }
+    $('sSubmit').disabled = false;
+  }
+
+  /* ---------- แอดมิน ---------- */
+  const IN_LABEL = {
+    IN:      e => ['ok',   '✅ ' + e.inTime],
+    LATE:    e => ['warn', '⏰ ' + e.inTime + ' (+' + e.late + ')'],
+    MISSING: e => ['bad',  '❌ ยังไม่เข้า'],
+    NOT_DUE: e => ['',     e.due ? '🕐 เข้า ' + e.due : '🕐 ยังไม่ถึงเวลา'],
+    OFF:     e => ['',     '💤 ' + e.offReason]
+  };
+  const OUT_LABEL = {
+    OUT: e => 'ออก ' + e.outTime, EARLY: e => 'ออก ' + e.outTime + ' (ก่อน ' + e.early + ')',
+    WORKING: e => 'ยังทำงานอยู่', NOT_OUT: e => '⚠️ ยังไม่เช็คเอาท์', '-': e => ''
+  };
+  const isProblem = e => e.inStatus === 'MISSING' || e.inStatus === 'LATE' || e.outStatus === 'NOT_OUT'
+    || e.outStatus === 'EARLY' || e.inArea === false || e.atOtherBranch;
+
+  async function openAdmin() {
+    show('staffView', false); show('salesView', false); show('adminView'); show('resultBox', false);
+    const adminOnly = !!(me && me.adminOnly);
+    show('btnBack', !adminOnly); show('btnClose', adminOnly);
+    await loadAdmin();
+  }
+  async function loadAdmin() {
+    $('btnRefresh').disabled = true;
+    setStatus('กำลังโหลด…');
+    try {
+      const d = await api({ action: 'today' });
+      if (!d.ok) throw new Error(d.error);
+      adminData = d; setStatus(''); renderAdmin();
+    } catch (e) { setStatus(e.message); }
+    $('btnRefresh').disabled = false;
+  }
+  function renderAdmin() {
+    const d = adminData, s = d.summary;
+    $('adminSub').textContent = d.date + ' · อัปเดต ' + d.time + ' น.';
+    $('stats').innerHTML = [
+      [s.checkedIn + '/' + s.expected, 'เข้าแล้ว'], [s.missing, 'ยังไม่เข้า'], [s.late, 'สาย'], [s.out, 'ออกแล้ว']
+    ].map(x => '<div class="stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
+    const nProblem = d.employees.filter(isProblem).length;
+    const tabs = [['problem','ต้องติดตาม (' + nProblem + ')'], ['missing','ยังไม่เข้า (' + s.missing + ')'], ['all','ทั้งหมด']];
+    $('tabs').innerHTML = tabs.map(t => '<button class="tab' + (adminTab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('');
+    $('tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => { adminTab = b.dataset.t; renderAdmin(); });
+
+    let list = d.employees;
+    if (adminTab === 'problem') list = list.filter(isProblem);
+    if (adminTab === 'missing') list = list.filter(e => e.inStatus === 'MISSING');
+
+    const groups = {};
+    list.forEach(e => { const k = e.isFloat ? 'ZZZ_FLOAT' : e.home; (groups[k] = groups[k] || []).push(e); });
+    const bMap = {}; d.branches.forEach(b => bMap[b.code] = b);
+    const keys = Object.keys(groups).sort();
+    if (!keys.length) {
+      $('adminList').innerHTML = '<div class="card msg">' + (adminTab === 'all' ? 'ยังไม่มีพนักงาน' : '✅ ไม่มีรายการที่ต้องติดตาม') + '</div>';
+      return;
+    }
+    $('adminList').innerHTML = keys.map(k => {
+      const emps = groups[k], first = emps[0], b = bMap[first.home];
+      const hrs = first.isFloat ? '' : (b ? (b.open ? b.open + '–' + b.close : 'ปิดวันนี้') : '');
+      return '<div class="br"><h3>' + esc(first.homeName) + '<small>' + hrs + '</small></h3>'
+        + emps.map(e => {
+            const il = IN_LABEL[e.inStatus](e), ol = OUT_LABEL[e.outStatus](e);
+            const extra = [];
+            if (e.inArea === false) extra.push('📍 นอกพื้นที่');
+            else if (e.atOtherBranch) extra.push('📍 ที่ ' + e.inWhere);
+            if (e.isFloat && e.visits.length) extra.push(e.visits.join(' → '));
+            return '<div class="emp"><div>' + esc(e.name) + (extra.length ? '<br><small class="warn">' + esc(extra.join(' · ')) + '</small>' : '') + '</div>'
+              + '<div class="st ' + il[0] + '">' + esc(il[1]) + (ol ? '<small>' + esc(ol) + '</small>' : '') + '</div></div>';
+          }).join('')
+        + '</div>';
+    }).join('');
+  }
+
+  /* ---------- events ---------- */
+  $('regBtn').onclick = register;
+  $('btnIn').onclick = () => checkin('IN');
+  $('btnOut').onclick = () => checkin('OUT');
+  $('btnAdmin').onclick = openAdmin;
+  $('btnSales').onclick = openSales;
+  $('btnRefresh').onclick = loadAdmin;
+  $('btnBack').onclick = () => { show('adminView', false); show('staffView'); setStatus(''); };
+  $('sBack').onclick = () => { show('salesView', false); show('staffView'); setStatus(''); };
+  $('sSubmit').onclick = submitSales;
+  ['sCash','sTransfer','sCredit'].forEach(id => $(id).oninput = sumTotal);
+  liff.init({ liffId: LIFF_ID })
+    .then(async () => {
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      await loadStatus();
+      const view = new URLSearchParams(location.search).get('view');
+      if (view === 'admin' && me && me.isAdmin) openAdmin();
+      if (view === 'sales' && me && me.salesEnabled && me.registered && !me.adminOnly) openSales();
+    })
+    .catch(e => setStatus('เปิดระบบไม่สำเร็จ: ' + e.message));
+</script>
+</body>
+</html>
