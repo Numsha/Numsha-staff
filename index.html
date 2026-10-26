@@ -614,6 +614,7 @@
       const view = new URLSearchParams(location.search).get('view');
       if (view === 'admin' && me && me.isAdmin) openAdmin();
       if (view === 'sales' && me && me.salesEnabled && me.registered && !me.adminOnly) openSales();
+      if (view === 'leave' && me && me.leaveEnabled && me.registered && !me.adminOnly) openLeave();
     })
     .catch(e => setStatus('เปิดระบบไม่สำเร็จ: ' + e.message));
 </script>
