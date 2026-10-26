@@ -52,6 +52,12 @@
   .emp:first-of-type { border-top:0; }
   .st { font-weight:700; white-space:nowrap; text-align:right; }
   .st small { display:block; font-weight:400; color:var(--muted); }
+  /* ลิงก์อนุมัติ/ยกเลิกในแถว ให้กดง่ายบนมือถือ */
+  .st a { display:inline-block; padding:6px 10px; margin-top:2px; border-radius:8px;
+          text-decoration:none; font-weight:700; background:rgba(127,127,127,.12); }
+  .st a.ok  { color:#0a7d33; }
+  .st a.bad { color:#b3261e; }
+  .st small a { font-weight:400; }
 </style>
 </head>
 <body>
@@ -87,10 +93,52 @@
         <button class="out" id="btnOut">ออกงาน</button>
       </div>
       <button class="ghost hide" id="btnSales">💰 แจ้งยอดขาย</button>
+      <button class="ghost hide" id="btnLeave">🗓️ ขอลา / วันลาของฉัน</button>
       <button class="ghost hide" id="btnAdmin">📊 สถานะวันนี้ทุกสาขา</button>
     </div>
 
     <div class="card result hide" id="resultBox" style="margin-top:14px"></div>
+  </div>
+
+  <!-- ===== หน้าขอลา ===== -->
+  <div id="leaveView" class="hide">
+    <h1>ขอลา</h1>
+    <div class="sub" id="lvSub"></div>
+
+    <div class="card">
+      <div class="row"><span>ลารวมเดือนนี้</span><b id="lvQuota">-</b></div>
+      <div class="row"><span>ลาป่วยเดือนนี้</span><b id="lvSick">-</b></div>
+      <div class="row hide" id="lvDedRow"><span>ถูกหักเงิน</span><b id="lvDed">-</b></div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <b>ส่งคำขอใหม่</b>
+      <label for="lvDate">วันที่ลา</label>
+      <input type="date" id="lvDate">
+      <label for="lvType">ประเภท</label>
+      <select id="lvType">
+        <option value="ลากิจ">ลากิจ</option>
+        <option value="ลาป่วย">ลาป่วย</option>
+      </select>
+      <label for="lvDur">ระยะเวลา</label>
+      <select id="lvDur">
+        <option value="เต็มวัน">เต็มวัน</option>
+        <option value="ครึ่งวัน">ครึ่งวัน</option>
+      </select>
+      <label for="lvReason">เหตุผล</label>
+      <input id="lvReason" placeholder="เช่น ไปทำธุระที่อำเภอ" autocomplete="off">
+      <button class="full" id="lvSubmit" style="margin-top:12px">ส่งคำขอ</button>
+      <div class="msg" id="lvHint" style="text-align:left;margin-top:8px"></div>
+    </div>
+
+    <div class="card result hide" id="lvResult" style="margin-top:12px"></div>
+
+    <div style="margin-top:14px">
+      <b style="font-size:15px">คำขอของฉันเดือนนี้</b>
+      <div id="lvList" style="margin-top:8px"></div>
+    </div>
+
+    <button class="ghost" id="lvBack" style="margin-top:14px">← กลับหน้าลงเวลา</button>
   </div>
 
   <!-- ===== หน้าแจ้งยอดขาย ===== -->
@@ -136,7 +184,7 @@
 <script>
   /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
   const LIFF_ID = '2011770140-oH5cwmNX';
-  const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
+  const API_URL = 'วาง_URL_ที่ลงท้ายด้วย_exec_ตรงนี้';
   /* ================================== */
 
   const $ = id => document.getElementById(id);
@@ -145,6 +193,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   const baht = n => Number(n || 0).toLocaleString('th-TH');
   let me = null, adminData = null, adminTab = 'problem';
+  let lvData = null, lvPending = null, lvMonth = null;
 
   function tick() {
     const now = new Date();
@@ -203,6 +252,7 @@
     $('btnOut').disabled = s.isFloat ? false : !!s.todayOut;
     show('btnAdmin', !!s.isAdmin);
     show('btnSales', !!s.salesEnabled);
+    show('btnLeave', !!s.leaveEnabled);
     show('regBox', false); show('mainBox');
   }
 
@@ -268,6 +318,159 @@
     show('resultBox');
   }
 
+  /* ---------- ขอลา (พนักงาน) ---------- */
+  const LV_BADGE = { 'รออนุมัติ': 'warn', 'อนุมัติ': 'ok', 'ไม่อนุมัติ': 'bad', 'ยกเลิก': '' };
+
+  async function openLeave() {
+    show('staffView', false); show('leaveView'); show('lvResult', false); setStatus('');
+    $('lvList').innerHTML = '<div class="card msg">กำลังโหลด…</div>';
+    await loadLeave();
+  }
+
+  async function loadLeave() {
+    try {
+      const r = await api({ action: 'leaveMine' });
+      if (!r.ok) throw new Error(r.error);
+      lvData = r;
+      $('lvSub').textContent = 'เดือน ' + r.month;
+      $('lvQuota').textContent = 'ใช้ ' + r.used + ' / ' + r.quota + ' วัน (เหลือ ' + r.left + ')';
+      $('lvQuota').className = r.used >= r.quota ? 'bad' : '';
+      $('lvSick').textContent = r.sickUsed + ' วัน (นับรวมในโควตา)';
+      show('lvDedRow', r.over > 0);
+      if (r.over > 0) {
+        $('lvDed').textContent = 'เกิน ' + r.over + ' วัน · หัก ' + baht(r.deduction) + ' บาท';
+        $('lvDed').className = 'bad';
+      }
+      $('lvHint').textContent = 'ลากิจต้องขอล่วงหน้าอย่างน้อย ' + r.advanceDays +
+        ' วัน · ลาป่วยย้อนหลังได้ไม่เกิน ' + r.sickBackDays + ' วัน · ลาครึ่งวันนับเป็น 0.5 วัน' +
+        (r.dayRate ? ' · ลาเกินโควตาหักวันละ ' + baht(r.dayRate) + ' บาท' : '');
+      setLeaveDateBounds();
+      renderLeaveList();
+    } catch (e) {
+      $('lvList').innerHTML = '<div class="card msg bad">' + esc(e.message) + '</div>';
+    }
+  }
+
+  function setLeaveDateBounds() {
+    if (!lvData) return;
+    const t = lvData.today;
+    const sick = $('lvType').value === 'ลาป่วย';
+    const base = new Date(t + 'T00:00:00');
+    const lo = new Date(base), hi = new Date(base);
+    if (sick) { lo.setDate(lo.getDate() - (lvData.sickBackDays || 2)); hi.setDate(hi.getDate() + 180); }
+    else { lo.setDate(lo.getDate() + (lvData.advanceDays || 1)); hi.setDate(hi.getDate() + 180); }
+    const iso = d => d.toISOString().slice(0, 10);
+    $('lvDate').min = iso(lo); $('lvDate').max = iso(hi);
+    if (!$('lvDate').value || $('lvDate').value < iso(lo)) $('lvDate').value = iso(lo);
+  }
+
+  function renderLeaveList() {
+    const items = (lvData && lvData.items) || [];
+    if (!items.length) { $('lvList').innerHTML = '<div class="card msg">เดือนนี้ยังไม่มีคำขอ</div>'; return; }
+    $('lvList').innerHTML = '<div class="br">' + items.map(it =>
+      '<div class="emp"><div>' + esc(it.date) + ' · ' + esc(it.type) +
+        (it.duration === 'ครึ่งวัน' ? ' (ครึ่งวัน)' : '') +
+        '<br><small class="msg">' + esc(it.reason) + '</small>' +
+        (it.decideNote ? '<br><small class="warn">' + esc(it.decideNote) + '</small>' : '') +
+      '</div><div class="st ' + (LV_BADGE[it.status] || '') + '">' + esc(it.status) +
+        (it.canCancel ? '<small><a href="#" data-cancel="' + esc(it.id) + '">ยกเลิก</a></small>' : '') +
+      '</div></div>').join('') + '</div>';
+    $('lvList').querySelectorAll('[data-cancel]').forEach(a => a.onclick = async ev => {
+      ev.preventDefault();
+      a.textContent = 'กำลังยกเลิก…';
+      try {
+        const r = await api({ action: 'leaveCancel', id: a.dataset.cancel });
+        if (!r.ok) throw new Error(r.error);
+        await loadLeave();
+      } catch (e) { setStatus(e.message); await loadLeave(); }
+    });
+  }
+
+  async function submitLeave() {
+    const reason = $('lvReason').value.trim();
+    if (!reason) return setStatus('กรุณาระบุเหตุผล');
+    $('lvSubmit').disabled = true; setStatus('กำลังส่ง…');
+    try {
+      const r = await api({ action: 'leaveRequest', leaveDate: $('lvDate').value,
+        leaveType: $('lvType').value, duration: $('lvDur').value, reason: reason });
+      setStatus('');
+      const box = $('lvResult');
+      if (!r.ok) box.innerHTML = '<div class="big">⚠️</div><b class="bad">' + esc(r.error) + '</b>';
+      else {
+        box.innerHTML = '<div class="big">' + (r.over ? '⚠️' : '✅') + '</div><b class="' +
+          (r.over ? 'bad' : '') + '">' + esc(r.message) + '</b>'
+          + '<div class="msg">' + esc(r.date) + ' · ' + esc(r.type) + ' · ' + esc(r.duration) + '</div>';
+        $('lvReason').value = '';
+      }
+      show('lvResult');
+      await loadLeave();
+    } catch (e) { setStatus(e.message); }
+    $('lvSubmit').disabled = false;
+  }
+
+  /* ---------- อนุมัติ + ตารางลา (แอดมิน) ---------- */
+  async function renderApprove() {
+    $('adminList').innerHTML = '<div class="card msg">กำลังโหลด…</div>';
+    try {
+      const r = await api({ action: 'leavePending' });
+      if (!r.ok) throw new Error(r.error);
+      lvPending = r;
+      if (!r.items.length) { $('adminList').innerHTML = '<div class="card msg">✅ ไม่มีคำขอรออนุมัติ</div>'; return; }
+      $('adminList').innerHTML = '<div class="br">' + r.items.map(it =>
+        '<div class="emp"><div><b>' + esc(it.name) + '</b> · ' + esc(it.branch) +
+          '<br>' + esc(it.date) + ' · ' + esc(it.type) + (it.duration === 'ครึ่งวัน' ? ' (ครึ่งวัน)' : '') +
+          '<br><small class="msg">' + esc(it.reason) + '</small>' +
+          '<br><small class="' + (it.over ? 'bad' : 'msg') + '">ลาเดือนนี้รวม ' +
+            it.quotaUsed + '/' + it.quota + ' วัน' +
+            (it.over ? ' — เกินโควตา หัก ' + baht(it.cost) + ' บาท' : '') + '</small>' +
+        '</div><div class="st"><a href="#" class="ok" data-ok="' + esc(it.id) + '">อนุมัติ</a>' +
+          '<small><a href="#" class="bad" data-no="' + esc(it.id) + '">ไม่อนุมัติ</a></small></div></div>').join('') + '</div>';
+      $('adminList').querySelectorAll('[data-ok],[data-no]').forEach(a => a.onclick = async ev => {
+        ev.preventDefault();
+        const approve = a.hasAttribute('data-ok');
+        const id = approve ? a.dataset.ok : a.dataset.no;
+        const note = approve ? '' : (prompt('เหตุผลที่ไม่อนุมัติ (ไม่บังคับ)') || '');
+        a.textContent = 'กำลังบันทึก…';
+        try {
+          const d = await api({ action: 'leaveDecide', id: id, approve: approve, note: note });
+          if (!d.ok) throw new Error(d.error);
+        } catch (e) { setStatus(e.message); }
+        await renderApprove();
+      });
+    } catch (e) {
+      $('adminList').innerHTML = '<div class="card msg bad">' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function renderLeaveMonth() {
+    $('adminList').innerHTML = '<div class="card msg">กำลังโหลด…</div>';
+    try {
+      const r = await api({ action: 'leaveMonth' });
+      if (!r.ok) throw new Error(r.error);
+      lvMonth = r;
+      const head = '<div class="card"><div class="row"><span>เดือน</span><b>' + esc(r.month) + '</b></div>'
+        + '<div class="row"><span>วันลารวม</span><b>' + r.totalDays + ' วัน</b></div>'
+        + '<div class="row"><span>รออนุมัติ</span><b class="' + (r.pending ? 'warn' : '') + '">' + r.pending + ' รายการ</b></div>'
+        + '<div class="row"><span>หักเงินรวมเดือนนี้</span><b class="' + (r.totalDeduction ? 'bad' : '') + '">'
+        + baht(r.totalDeduction) + ' บาท</b></div></div>';
+      const byDay = r.days.length ? r.days.map(d =>
+        '<div class="br"><h3>' + esc(d.label) + '<small>' + d.items.length + ' คน</small></h3>'
+        + d.items.map(i => '<div class="emp"><div>' + esc(i.name) + '<br><small class="msg">' + esc(i.branch) + '</small></div>'
+            + '<div class="st ' + (i.status === 'อนุมัติ' ? 'ok' : 'warn') + '">' + esc(i.type) +
+              (i.duration === 'ครึ่งวัน' ? ' ½' : '') + '<small>' + esc(i.status) + '</small></div></div>').join('')
+        + '</div>').join('') : '<div class="card msg">เดือนนี้ยังไม่มีใครลา</div>';
+      const byPerson = r.people.length ? '<div class="br"><h3>สรุปรายคน<small>โควตาลากิจ ' + r.quota + ' วัน</small></h3>'
+        + r.people.map(p => '<div class="emp"><div>' + esc(p.name) + '<br><small class="msg">' + esc(p.branch) + '</small></div>'
+            + '<div class="st ' + (p.over ? 'bad' : '') + '">ก ' + p.personal + '/' + p.quota + ' · ป ' + p.sick
+            + (p.deduction ? '<small class="bad">หัก ' + baht(p.deduction) + '</small>'
+               : (p.waiting ? '<small class="warn">รออนุมัติ ' + p.waiting + '</small>' : '')) + '</div></div>').join('')
+        + '</div>' : '';
+      $('adminList').innerHTML = head + byDay + byPerson;
+    } catch (e) {
+      $('adminList').innerHTML = '<div class="card msg bad">' + esc(e.message) + '</div>';
+    }
+  }
+
   /* ---------- แจ้งยอดขาย ---------- */
   function openSales() {
     show('staffView', false); show('salesView'); show('sResult', false); setStatus('');
@@ -317,7 +520,7 @@
     LATE:    e => ['warn', '⏰ ' + e.inTime + ' (+' + e.late + ')'],
     MISSING: e => ['bad',  '❌ ยังไม่เข้า'],
     NOT_DUE: e => ['',     e.due ? '🕐 เข้า ' + e.due : '🕐 ยังไม่ถึงเวลา'],
-    OFF:     e => ['',     '💤 ' + e.offReason]
+    OFF:     e => ['',     (e.leaveType ? '🗓️ ' : '💤 ') + e.offReason]
   };
   const OUT_LABEL = {
     OUT: e => 'ออก ' + e.outTime, EARLY: e => 'ออก ' + e.outTime + ' (ก่อน ' + e.early + ')',
@@ -350,8 +553,15 @@
     ].map(x => '<div class="stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
     const nProblem = d.employees.filter(isProblem).length;
     const tabs = [['problem','ต้องติดตาม (' + nProblem + ')'], ['missing','ยังไม่เข้า (' + s.missing + ')'], ['all','ทั้งหมด']];
+    if (me && me.leaveEnabled) {
+      if (me.isApprover) tabs.push(['approve','คำขอลา' + (lvPending && lvPending.count ? ' (' + lvPending.count + ')' : '')]);
+      tabs.push(['leave','ตารางลาเดือนนี้']);
+    }
     $('tabs').innerHTML = tabs.map(t => '<button class="tab' + (adminTab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('');
     $('tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => { adminTab = b.dataset.t; renderAdmin(); });
+
+    if (adminTab === 'approve') { renderApprove(); return; }
+    if (adminTab === 'leave')   { renderLeaveMonth(); return; }
 
     let list = d.employees;
     if (adminTab === 'problem') list = list.filter(isProblem);
@@ -388,6 +598,10 @@
   $('btnOut').onclick = () => checkin('OUT');
   $('btnAdmin').onclick = openAdmin;
   $('btnSales').onclick = openSales;
+  $('btnLeave').onclick = openLeave;
+  $('lvBack').onclick = () => { show('leaveView', false); show('staffView'); setStatus(''); };
+  $('lvSubmit').onclick = submitLeave;
+  $('lvType').onchange = setLeaveDateBounds;
   $('btnRefresh').onclick = loadAdmin;
   $('btnBack').onclick = () => { show('adminView', false); show('staffView'); setStatus(''); };
   $('sBack').onclick = () => { show('salesView', false); show('staffView'); setStatus(''); };
