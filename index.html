@@ -58,6 +58,24 @@
   .st a.ok  { color:#0a7d33; }
   .st a.bad { color:#b3261e; }
   .st small a { font-weight:400; }
+  /* ---------- สรุปการเข้างานย้อนหลัง ---------- */
+  details.br { padding:12px 14px; }
+  details.br summary { list-style:none; cursor:pointer; }
+  details.br summary::-webkit-details-marker { display:none; }
+  .arow { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .arow small { color:var(--muted); font-size:12px; }
+  .mini { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-top:10px; }
+  .mini div { text-align:center; background:#f7f8fa; border-radius:8px; padding:5px 2px; }
+  .mini b { display:block; font-size:16px; font-variant-numeric:tabular-nums; }
+  .mini span { font-size:10px; color:var(--muted); }
+  .strip { display:grid; gap:2px; margin-top:10px; }
+  .strip i { display:block; height:16px; border-radius:3px; background:#eceef1; }
+  .strip i.o { background:var(--green); } .strip i.l { background:var(--amber); }
+  .strip i.a { background:var(--red); }   .strip i.k { background:#c7d2fe; }
+  .legend { display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--muted); margin:2px 2px 12px; }
+  .legend i { display:inline-block; width:11px; height:11px; border-radius:3px; vertical-align:-1px; margin-right:3px; }
+  .detail { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:13px; color:var(--muted); }
+  .detail b { color:var(--ink); }
 </style>
 </head>
 <body>
@@ -193,6 +211,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   const baht = n => Number(n || 0).toLocaleString('th-TH');
   let me = null, adminData = null, adminTab = 'problem';
+  let attData = null, attMode = 'month', attMonth = '', attLoading = false;
   let lvData = null, lvPending = null, lvMonth = null;
 
   function tick() {
@@ -552,16 +571,20 @@
       [s.checkedIn + '/' + s.expected, 'เข้าแล้ว'], [s.missing, 'ยังไม่เข้า'], [s.late, 'สาย'], [s.out, 'ออกแล้ว']
     ].map(x => '<div class="stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
     const nProblem = d.employees.filter(isProblem).length;
-    const tabs = [['problem','ต้องติดตาม (' + nProblem + ')'], ['missing','ยังไม่เข้า (' + s.missing + ')'], ['all','ทั้งหมด']];
+    const tabs = [['problem','ต้องติดตาม (' + nProblem + ')'], ['missing','ยังไม่เข้า (' + s.missing + ')'], ['all','ทั้งหมด'], ['sum','สรุปเข้างาน']];
     if (me && me.leaveEnabled) {
       if (me.isApprover) tabs.push(['approve','คำขอลา' + (lvPending && lvPending.count ? ' (' + lvPending.count + ')' : '')]);
       tabs.push(['leave','ตารางลาเดือนนี้']);
     }
     $('tabs').innerHTML = tabs.map(t => '<button class="tab' + (adminTab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('');
-    $('tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => { adminTab = b.dataset.t; renderAdmin(); });
+    $('tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => {
+      adminTab = b.dataset.t; renderAdmin();
+      if (adminTab === 'sum' && !attData && !attLoading) loadAttendance();
+    });
 
     if (adminTab === 'approve') { renderApprove(); return; }
     if (adminTab === 'leave')   { renderLeaveMonth(); return; }
+    if (adminTab === 'sum')     { renderAttendance(); return; }
 
     let list = d.employees;
     if (adminTab === 'problem') list = list.filter(isProblem);
@@ -592,6 +615,97 @@
     }).join('');
   }
 
+  /* ---------- สรุปการเข้างานย้อนหลัง ---------- */
+  async function loadAttendance() {
+    if (attLoading) return;
+    attLoading = true;
+    setStatus('กำลังโหลด…');
+    try {
+      const d = await api({ action: 'attendance', mode: attMode, month: attMonth });
+      if (!d.ok) throw new Error(d.error);
+      attData = d;
+      if (d.month) attMonth = d.month;
+      setStatus('');
+    } catch (e) { setStatus(e.message); }
+    attLoading = false;
+    renderAdmin();
+  }
+
+  function renderAttendance() {
+    const d = attData;
+    if (d) {
+      const s = d.summary;
+      $('adminSub').textContent = d.label + ' · พนักงาน ' + s.staff + ' คน';
+      $('stats').innerHTML = [
+        [s.work, 'วันทำงาน'], [s.ontime, 'ตรงเวลา'], [s.late, 'สาย'], [s.absent, 'ขาด']
+      ].map(x => '<div class="stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
+    }
+
+    const ctl = '<div class="card" style="padding:12px 14px">'
+      + '<div class="tabs" style="margin:0">'
+      + '<button class="tab' + (attMode === 'month' ? ' on' : '') + '" data-m="month">รายเดือน</button>'
+      + '<button class="tab' + (attMode === 'week' ? ' on' : '') + '" data-m="week">7 วันล่าสุด</button>'
+      + '</div>'
+      + (attMode === 'month'
+          ? '<input type="month" id="attMonth" value="' + attMonth + '" style="margin-top:10px">'
+          : '')
+      + '</div>';
+
+    if (!d) { $('adminList').innerHTML = ctl + '<div class="card msg">กำลังโหลด…</div>'; bindAtt(); return; }
+
+    const legend = '<div class="legend">'
+      + '<span><i style="background:#06c755"></i>ตรงเวลา</span>'
+      + '<span><i style="background:#d9900b"></i>สาย</span>'
+      + '<span><i style="background:#e5484d"></i>ขาด</span>'
+      + '<span><i style="background:#c7d2fe"></i>ลา</span>'
+      + '<span><i></i>ไม่ต้องมา</span></div>';
+
+    const cols = d.dayNums.length;
+    const body = d.employees.map(e => {
+      const strip = '<div class="strip" style="grid-template-columns:repeat(' + cols + ',1fr)">'
+        + e.days.split('').map((c, i) =>
+            '<i class="' + (c === '-' ? '' : c) + '" title="' + d.dayNums[i] + ' ' + d.dayLabels[i] + '"></i>').join('')
+        + '</div>';
+      const mini = '<div class="mini">'
+        + [[e.work, 'มาทำงาน'], [e.ontime, 'ตรงเวลา'], [e.late, 'สาย'], [e.absent, 'ขาด'], [e.leaveDays, 'ลา']]
+            .map(x => '<div><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('')
+        + '</div>';
+
+      const flags = [];
+      if (e.notRegistered) flags.push('ยังไม่ลงทะเบียน LINE');
+      if (e.lateMin) flags.push('สายรวม ' + e.lateMin + ' นาที');
+      if (e.noOut) flags.push('ลืมเช็คเอาท์ ' + e.noOut + ' วัน');
+      if (e.earlyOut) flags.push('ออกก่อน ' + e.earlyOut + ' วัน');
+
+      const detail = '<div class="detail">'
+        + (e.lateList.length ? '<div><b>วันที่สาย</b> ' + esc(e.lateList.join(' · ')) + '</div>' : '')
+        + (e.absentList.length ? '<div style="margin-top:6px"><b>วันที่ขาด</b> ' + esc(e.absentList.join(' · ')) + '</div>' : '')
+        + (!e.lateList.length && !e.absentList.length ? 'ไม่มีวันสายหรือขาดในช่วงนี้' : '')
+        + '</div>';
+
+      return '<details class="br"><summary>'
+        + '<div class="arow"><div><b>' + esc(e.name) + '</b><br><small>' + esc(e.homeName) + '</small></div>'
+        + '<div class="st ' + (e.absent || e.notRegistered ? 'bad' : e.late ? 'warn' : 'ok') + '">' + e.work + '/' + e.expected
+        + '<small>' + (flags.length ? esc(flags.join(' · ')) : 'ครบถ้วน') + '</small></div></div>'
+        + mini + strip + '</summary>' + detail + '</details>';
+    }).join('');
+
+    $('adminList').innerHTML = ctl + legend + (body || '<div class="card msg">ไม่มีข้อมูล</div>');
+    bindAtt();
+  }
+
+  function bindAtt() {
+    $('adminList').querySelectorAll('.tab[data-m]').forEach(b => b.onclick = () => {
+      if (attMode === b.dataset.m) return;
+      attMode = b.dataset.m; attData = null; renderAdmin(); loadAttendance();
+    });
+    const mi = $('attMonth');
+    if (mi) mi.onchange = () => {
+      if (!mi.value) return;
+      attMonth = mi.value; attData = null; renderAdmin(); loadAttendance();
+    };
+  }
+
   /* ---------- events ---------- */
   $('regBtn').onclick = register;
   $('btnIn').onclick = () => checkin('IN');
@@ -602,7 +716,7 @@
   $('lvBack').onclick = () => { show('leaveView', false); show('staffView'); setStatus(''); };
   $('lvSubmit').onclick = submitLeave;
   $('lvType').onchange = setLeaveDateBounds;
-  $('btnRefresh').onclick = loadAdmin;
+  $('btnRefresh').onclick = () => { if (adminTab === 'sum') { attData = null; loadAttendance(); } else loadAdmin(); };
   $('btnBack').onclick = () => { show('adminView', false); show('staffView'); setStatus(''); };
   $('sBack').onclick = () => { show('salesView', false); show('staffView'); setStatus(''); };
   $('sSubmit').onclick = submitSales;
