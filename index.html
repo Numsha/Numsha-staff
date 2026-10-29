@@ -201,15 +201,20 @@
   </div>
 
   <div class="msg" id="status"></div>
+  <!-- เลขเวอร์ชัน ไว้ดูว่าเครื่องที่เปิดอยู่โหลดไฟล์ใหม่แล้วหรือยัง -->
+  <div class="msg" id="build" style="font-size:11px;opacity:.45;margin-top:18px"></div>
 </div>
 
 <script>
   /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
+  /* ขึ้นเลขนี้ทุกครั้งที่แก้ไฟล์ จะได้รู้ว่าเครื่องไหนยังค้างไฟล์เก่าอยู่ */
+  const BUILD = '2026-10-29 a';
   const LIFF_ID = '2011770140-oH5cwmNX';
   const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
   /* ================================== */
 
   const $ = id => document.getElementById(id);
+  $('build').textContent = 'เวอร์ชัน ' + BUILD;
   const show = (id, on = true) => $(id).classList.toggle('hide', !on);
   /* bad = true ทำให้ข้อความขึ้นสีแดงตัวหนา ใช้กับข้อผิดพลาดทุกจุด
      ข้อความบอกความคืบหน้าอย่าง "กำลังส่ง…" ไม่ต้องส่งค่านี้ */
