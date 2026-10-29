@@ -34,6 +34,10 @@
   .result .big { font-size:40px; }
   .ok { color:var(--green); } .bad { color:var(--red); } .warn { color:var(--amber); }
   .msg { font-size:15px; color:var(--muted); text-align:center; margin-top:10px; }
+  /* ข้อความที่เป็นข้อผิดพลาด ต้องเด่นกว่าข้อความบอกสถานะทั่วไป
+     ประกาศหลัง .msg เพราะความเฉพาะเจาะจงเท่ากัน ตัวที่อยู่ทีหลังจะชนะ */
+  .msg.bad { color:var(--red); font-weight:700; }
+  input.bad, textarea.bad, select.bad { border-color:var(--red); background:#fff5f5; }
   .hide { display:none !important; }
   .tag { display:inline-block; font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; margin-left:6px; vertical-align:middle; }
   .chk { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); margin-top:12px; }
@@ -207,7 +211,22 @@
 
   const $ = id => document.getElementById(id);
   const show = (id, on = true) => $(id).classList.toggle('hide', !on);
-  const setStatus = t => $('status').textContent = t || '';
+  /* bad = true ทำให้ข้อความขึ้นสีแดงตัวหนา ใช้กับข้อผิดพลาดทุกจุด
+     ข้อความบอกความคืบหน้าอย่าง "กำลังส่ง…" ไม่ต้องส่งค่านี้ */
+  const setStatus = (t, bad) => {
+    const el = $('status');
+    el.textContent = t || '';
+    el.classList.toggle('bad', !!bad);
+  };
+  /* ไฮไลต์ช่องกรอกที่มีปัญหา ให้เห็นว่าต้องแก้ตรงไหน แล้วลบไฮไลต์เมื่อเริ่มพิมพ์ */
+  function markBad(id) {
+    const el = $(id);
+    if (!el) return;
+    el.classList.add('bad');
+    el.focus();
+    const clear = () => { el.classList.remove('bad'); el.removeEventListener('input', clear); };
+    el.addEventListener('input', clear);
+  }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   const baht = n => Number(n || 0).toLocaleString('th-TH');
   let me = null, adminData = null, adminTab = 'problem';
@@ -277,13 +296,13 @@
 
   async function register() {
     const code = $('empCode').value.trim();
-    if (!code) return setStatus('กรุณากรอกรหัสพนักงาน');
+    if (!code) { markBad('empCode'); return setStatus('กรุณากรอกรหัสพนักงาน', true); }
     $('regBtn').disabled = true; setStatus('กำลังลงทะเบียน…');
     try {
       const r = await api({ action: 'register', empCode: code });
       if (!r.ok) throw new Error(r.error);
       await loadStatus();
-    } catch (e) { setStatus(e.message); }
+    } catch (e) { setStatus(e.message, true); }
     $('regBtn').disabled = false;
   }
 
@@ -306,7 +325,7 @@
       renderResult(r);
       await loadStatus();
     } catch (e) {
-      setStatus(e.message);
+      setStatus(e.message, true);
       restoreButtons();
     }
   }
@@ -401,13 +420,13 @@
         const r = await api({ action: 'leaveCancel', id: a.dataset.cancel });
         if (!r.ok) throw new Error(r.error);
         await loadLeave();
-      } catch (e) { setStatus(e.message); await loadLeave(); }
+      } catch (e) { setStatus(e.message, true); await loadLeave(); }
     });
   }
 
   async function submitLeave() {
     const reason = $('lvReason').value.trim();
-    if (!reason) return setStatus('กรุณาระบุเหตุผล');
+    if (!reason) { markBad('lvReason'); return setStatus('กรุณาระบุเหตุผล', true); }
     $('lvSubmit').disabled = true; setStatus('กำลังส่ง…');
     try {
       const r = await api({ action: 'leaveRequest', leaveDate: $('lvDate').value,
@@ -423,7 +442,7 @@
       }
       show('lvResult');
       await loadLeave();
-    } catch (e) { setStatus(e.message); }
+    } catch (e) { setStatus(e.message, true); }
     $('lvSubmit').disabled = false;
   }
 
@@ -453,7 +472,7 @@
         try {
           const d = await api({ action: 'leaveDecide', id: id, approve: approve, note: note });
           if (!d.ok) throw new Error(d.error);
-        } catch (e) { setStatus(e.message); }
+        } catch (e) { setStatus(e.message, true); }
         await renderApprove();
       });
     } catch (e) {
@@ -514,7 +533,7 @@
   }
   async function submitSales() {
     const total = sumTotal();
-    if (total <= 0 && !$('sZero').checked) return setStatus('ยอดรวมเป็น 0 — ถ้าขายไม่ได้จริง กรุณาติ๊กยืนยัน');
+    if (total <= 0 && !$('sZero').checked) return setStatus('ยอดรวมเป็น 0 — ถ้าขายไม่ได้จริง กรุณาติ๊กยืนยัน', true);
     $('sSubmit').disabled = true; setStatus('กำลังส่ง…');
     try {
       const r = await api({ action:'sales',
@@ -529,7 +548,7 @@
         + '<div class="msg">' + esc(r.branchName) + ' · ' + esc(r.date) + '</div>'
         + '<div class="total"><span>ยอดรวม</span><b>' + baht(r.total) + '</b></div>';
       show('sResult');
-    } catch (e) { setStatus(e.message); }
+    } catch (e) { setStatus(e.message, true); }
     $('sSubmit').disabled = false;
   }
 
@@ -561,7 +580,7 @@
       const d = await api({ action: 'today' });
       if (!d.ok) throw new Error(d.error);
       adminData = d; setStatus(''); renderAdmin();
-    } catch (e) { setStatus(e.message); }
+    } catch (e) { setStatus(e.message, true); }
     $('btnRefresh').disabled = false;
   }
   function renderAdmin() {
@@ -626,7 +645,7 @@
       attData = d;
       if (d.month) attMonth = d.month;
       setStatus('');
-    } catch (e) { setStatus(e.message); }
+    } catch (e) { setStatus(e.message, true); }
     attLoading = false;
     renderAdmin();
   }
@@ -730,7 +749,7 @@
       if (view === 'sales' && me && me.salesEnabled && me.registered && !me.adminOnly) openSales();
       if (view === 'leave' && me && me.leaveEnabled && me.registered && !me.adminOnly) openLeave();
     })
-    .catch(e => setStatus('เปิดระบบไม่สำเร็จ: ' + e.message));
+    .catch(e => setStatus('เปิดระบบไม่สำเร็จ: ' + e.message, true));
 </script>
 </body>
 </html>
