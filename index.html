@@ -161,7 +161,7 @@
         <button type="button" data-v="จัดหาคนแทนแล้ว">จัดหาคนมาแทนเรียบร้อยแล้ว</button>
         <button type="button" data-v="ต้องให้ช่วยหาคนแทน">ยังไม่ได้จัดหาคนมาแทน<br><small>ต้องให้ช่วยจัดหาคนแทน</small></button>
       </div>
-      <input id="lvCoverBy" class="hide" style="margin-top:8px" placeholder="ชื่อคนที่มาแทน (ไม่ใส่ก็ได้)" autocomplete="off">
+      <input id="lvCoverBy" class="hide" style="margin-top:8px" placeholder="ชื่อคนที่มาแทน" autocomplete="off">
       <button class="full" id="lvSubmit" style="margin-top:12px">ส่งคำขอ</button>
       <div class="msg" id="lvHint" style="text-align:left;margin-top:8px"></div>
     </div>
@@ -221,7 +221,7 @@
 <script>
   /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
   /* ขึ้นเลขนี้ทุกครั้งที่แก้ไฟล์ จะได้รู้ว่าเครื่องไหนยังค้างไฟล์เก่าอยู่ */
-  const BUILD = '2026-11-04 a';
+  const BUILD = '2026-11-04 b';
   const LIFF_ID = '2011770140-oH5cwmNX';
   const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
   /* ================================== */
@@ -469,11 +469,16 @@
       $('lvCover').scrollIntoView({ block: 'center' });
       return setStatus('กรุณาเลือกว่าจัดหาคนมาแทนแล้วหรือยัง', true);
     }
+    const coverBy = $('lvCoverBy').value.trim();
+    if (lvCover === 'จัดหาคนแทนแล้ว' && !coverBy) {
+      markBad('lvCoverBy');
+      return setStatus('กรุณาระบุชื่อคนที่มาแทน', true);
+    }
     $('lvSubmit').disabled = true; setStatus('กำลังส่ง…');
     try {
       const r = await api({ action: 'leaveRequest', leaveDate: $('lvDate').value,
         leaveType: $('lvType').value, duration: $('lvDur').value, reason: reason,
-        cover: lvCover, coverBy: $('lvCoverBy').value.trim() });
+        cover: lvCover, coverBy: coverBy });
       setStatus('');
       const box = $('lvResult');
       if (!r.ok) box.innerHTML = '<div class="big">⚠️</div><b class="bad">' + esc(r.error) + '</b>';
@@ -503,7 +508,7 @@
           '<br>' + esc(it.date) + ' · ' + esc(it.type) + (it.duration === 'ครึ่งวัน' ? ' (ครึ่งวัน)' : '') +
           '<br><small class="msg">' + esc(it.reason) + '</small>' +
           (it.needCover ? '<br><small class="bad">⚠️ ยังไม่มีคนแทน ต้องช่วยจัดหา</small>'
-            : it.cover ? '<br><small class="msg">คนแทน: ' + esc(it.coverBy || 'จัดหาแล้ว') + '</small>' : '') +
+            : it.cover ? '<br><small class="msg">คนแทน: ' + esc(it.coverBy || '— ไม่ได้ระบุชื่อ') + '</small>' : '') +
           '<br><small class="' + (it.over ? 'bad' : 'msg') + '">ลาเดือนนี้รวม ' +
             it.quotaUsed + '/' + it.quota + ' วัน' +
             (it.over ? ' — เกินโควตา หัก ' + baht(it.cost) + ' บาท' : '') + '</small>' +
