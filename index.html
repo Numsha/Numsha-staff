@@ -38,6 +38,13 @@
      ประกาศหลัง .msg เพราะความเฉพาะเจาะจงเท่ากัน ตัวที่อยู่ทีหลังจะชนะ */
   .msg.bad { color:var(--red); font-weight:700; }
   input.bad, textarea.bad, select.bad { border-color:var(--red); background:#fff5f5; }
+  /* ตัวเลือกแบบกดเลือก ใช้แทน radio เพราะพื้นที่กดใหญ่กว่า กดพลาดยากกว่าบนมือถือ */
+  .pick { display:grid; gap:8px; }
+  .pick button { background:#fff; color:var(--ink); border:1px solid #d1d5db; border-radius:12px;
+                 font-size:15px; font-weight:600; padding:14px 12px; text-align:left; line-height:1.4; }
+  .pick button small { display:block; font-weight:400; color:var(--muted); font-size:13px; }
+  .pick button.on { border-color:var(--green); background:#f0fdf4; box-shadow:inset 0 0 0 1px var(--green); }
+  .pick.bad button { border-color:var(--red); background:#fff5f5; }
   .hide { display:none !important; }
   .tag { display:inline-block; font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; margin-left:6px; vertical-align:middle; }
   .chk { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); margin-top:12px; }
@@ -149,6 +156,12 @@
       </select>
       <label for="lvReason">เหตุผล</label>
       <input id="lvReason" placeholder="เช่น ไปทำธุระที่อำเภอ" autocomplete="off">
+      <label>คนดูแลสาขาในวันที่ลา</label>
+      <div class="pick" id="lvCover">
+        <button type="button" data-v="จัดหาคนแทนแล้ว">จัดหาคนมาแทนเรียบร้อยแล้ว</button>
+        <button type="button" data-v="ต้องให้ช่วยหาคนแทน">ยังไม่ได้จัดหาคนมาแทน<br><small>ต้องให้ช่วยจัดหาคนแทน</small></button>
+      </div>
+      <input id="lvCoverBy" class="hide" style="margin-top:8px" placeholder="ชื่อคนที่มาแทน (ไม่ใส่ก็ได้)" autocomplete="off">
       <button class="full" id="lvSubmit" style="margin-top:12px">ส่งคำขอ</button>
       <div class="msg" id="lvHint" style="text-align:left;margin-top:8px"></div>
     </div>
@@ -208,7 +221,7 @@
 <script>
   /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
   /* ขึ้นเลขนี้ทุกครั้งที่แก้ไฟล์ จะได้รู้ว่าเครื่องไหนยังค้างไฟล์เก่าอยู่ */
-  const BUILD = '2026-10-29 a';
+  const BUILD = '2026-11-04 a';
   const LIFF_ID = '2011770140-oH5cwmNX';
   const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
   /* ================================== */
@@ -367,8 +380,25 @@
   async function openLeave() {
     show('staffView', false); show('leaveView'); show('lvResult', false); setStatus('');
     $('lvList').innerHTML = '<div class="card msg">กำลังโหลด…</div>';
+    resetCover();
     await loadLeave();
   }
+
+  /* ตัวเลือกคนมาแทน ไม่ตั้งค่าเริ่มต้นไว้ ต้องให้พนักงานกดเลือกเอง */
+  let lvCover = '';
+  function resetCover() {
+    lvCover = '';
+    $('lvCover').classList.remove('bad');
+    $('lvCover').querySelectorAll('button').forEach(b => b.classList.remove('on'));
+    $('lvCoverBy').value = '';
+    show('lvCoverBy', false);
+  }
+  $('lvCover').querySelectorAll('button').forEach(b => b.onclick = () => {
+    lvCover = b.dataset.v;
+    $('lvCover').classList.remove('bad');
+    $('lvCover').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    show('lvCoverBy', lvCover === 'จัดหาคนแทนแล้ว');
+  });
 
   async function loadLeave() {
     try {
@@ -414,6 +444,8 @@
       '<div class="emp"><div>' + esc(it.date) + ' · ' + esc(it.type) +
         (it.duration === 'ครึ่งวัน' ? ' (ครึ่งวัน)' : '') +
         '<br><small class="msg">' + esc(it.reason) + '</small>' +
+        (it.needCover ? '<br><small class="warn">⚠️ ยังไม่มีคนแทน</small>'
+          : it.cover ? '<br><small class="msg">คนแทน: ' + esc(it.coverBy || 'จัดหาแล้ว') + '</small>' : '') +
         (it.decideNote ? '<br><small class="warn">' + esc(it.decideNote) + '</small>' : '') +
       '</div><div class="st ' + (LV_BADGE[it.status] || '') + '">' + esc(it.status) +
         (it.canCancel ? '<small><a href="#" data-cancel="' + esc(it.id) + '">ยกเลิก</a></small>' : '') +
@@ -432,10 +464,16 @@
   async function submitLeave() {
     const reason = $('lvReason').value.trim();
     if (!reason) { markBad('lvReason'); return setStatus('กรุณาระบุเหตุผล', true); }
+    if (!lvCover) {
+      $('lvCover').classList.add('bad');
+      $('lvCover').scrollIntoView({ block: 'center' });
+      return setStatus('กรุณาเลือกว่าจัดหาคนมาแทนแล้วหรือยัง', true);
+    }
     $('lvSubmit').disabled = true; setStatus('กำลังส่ง…');
     try {
       const r = await api({ action: 'leaveRequest', leaveDate: $('lvDate').value,
-        leaveType: $('lvType').value, duration: $('lvDur').value, reason: reason });
+        leaveType: $('lvType').value, duration: $('lvDur').value, reason: reason,
+        cover: lvCover, coverBy: $('lvCoverBy').value.trim() });
       setStatus('');
       const box = $('lvResult');
       if (!r.ok) box.innerHTML = '<div class="big">⚠️</div><b class="bad">' + esc(r.error) + '</b>';
@@ -444,6 +482,7 @@
           (r.over ? 'bad' : '') + '">' + esc(r.message) + '</b>'
           + '<div class="msg">' + esc(r.date) + ' · ' + esc(r.type) + ' · ' + esc(r.duration) + '</div>';
         $('lvReason').value = '';
+        resetCover();
       }
       show('lvResult');
       await loadLeave();
@@ -463,6 +502,8 @@
         '<div class="emp"><div><b>' + esc(it.name) + '</b> · ' + esc(it.branch) +
           '<br>' + esc(it.date) + ' · ' + esc(it.type) + (it.duration === 'ครึ่งวัน' ? ' (ครึ่งวัน)' : '') +
           '<br><small class="msg">' + esc(it.reason) + '</small>' +
+          (it.needCover ? '<br><small class="bad">⚠️ ยังไม่มีคนแทน ต้องช่วยจัดหา</small>'
+            : it.cover ? '<br><small class="msg">คนแทน: ' + esc(it.coverBy || 'จัดหาแล้ว') + '</small>' : '') +
           '<br><small class="' + (it.over ? 'bad' : 'msg') + '">ลาเดือนนี้รวม ' +
             it.quotaUsed + '/' + it.quota + ' วัน' +
             (it.over ? ' — เกินโควตา หัก ' + baht(it.cost) + ' บาท' : '') + '</small>' +
