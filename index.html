@@ -189,6 +189,9 @@
       <input type="date" id="sDate">
       <label for="sBranch">สาขา</label>
       <select id="sBranch"></select>
+      <label for="sSeller">คนขายวันนี้</label>
+      <select id="sSeller"></select>
+      <div class="msg hide" id="sSellerHint" style="text-align:left;margin:6px 2px 0"></div>
       <label for="sCash">เงินสด</label>
       <input type="number" id="sCash" class="money" inputmode="numeric" min="0" step="1" placeholder="0">
       <label for="sTransfer">เงินโอน</label>
@@ -225,7 +228,7 @@
 <script>
   /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
   /* ขึ้นเลขนี้ทุกครั้งที่แก้ไฟล์ จะได้รู้ว่าเครื่องไหนยังค้างไฟล์เก่าอยู่ */
-  const BUILD = '2026-11-04 c';
+  const BUILD = '2026-11-08 a';
   const LIFF_ID = '2011770140-oH5cwmNX';
   const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
   /* ================================== */
@@ -565,12 +568,33 @@
   }
 
   /* ---------- แจ้งยอดขาย ---------- */
+  /* เตือนเมื่อคนขายไม่ใช่ตัวเอง เพราะมีผลกับคอมมิชชั่นโดยตรง
+     ต้องให้เห็นก่อนกดส่ง ไม่ใช่ไปรู้ตอนสิ้นเดือน */
+  function sellerHint() {
+    const other = $('sSeller').value && $('sSeller').value !== me.empCode;
+    const el = $('sSellerHint');
+    el.innerHTML = other
+      ? '⚠️ ยอดวันนี้จะเข้าชื่อ <b>' + esc($('sSeller').selectedOptions[0].textContent)
+        + '</b> ไม่ใช่ของคุณ และจะไม่ถูกนับเป็นคอมมิชชั่นของคุณ'
+      : '';
+    show('sSellerHint', other);
+  }
+
   function openSales() {
     show('staffView', false); show('salesView'); show('sResult', false); setStatus('');
     const sel = $('sBranch');
     sel.innerHTML = (me.branches || []).map(b =>
       '<option value="' + esc(b.code) + '"' + (b.code === me.homeBranch ? ' selected' : '') + '>'
       + esc(b.code) + ' · ' + esc(b.name) + '</option>').join('');
+    /* คนขายตั้งต้นเป็นตัวเองเสมอ เปลี่ยนเฉพาะวันที่มีคนอื่นมาขายแทน */
+    const sl = $('sSeller');
+    sl.innerHTML = (me.sellers || []).map(s =>
+      '<option value="' + esc(s.code) + '"' + (s.code === me.empCode ? ' selected' : '') + '>'
+      + esc(s.label) + '</option>').join('');
+    sl.value = me.empCode;
+    sl.onchange = sellerHint;
+    sellerHint();
+
     $('sDate').value = me.today;
     $('sDate').max = me.today;
     const min = new Date(me.today + 'T00:00:00');
@@ -595,7 +619,7 @@
         saleDate: $('sDate').value, branch: $('sBranch').value,
         cash: Number($('sCash').value) || 0, transfer: Number($('sTransfer').value) || 0,
         credit: Number($('sCredit').value) || 0, note: $('sNote').value,
-        allowZero: $('sZero').checked });
+        sellerCode: $('sSeller').value, allowZero: $('sZero').checked });
       setStatus('');
       const box = $('sResult');
       if (!r.ok) box.innerHTML = '<div class="big">⚠️</div><b class="bad">' + esc(r.error) + '</b>';
