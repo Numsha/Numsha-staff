@@ -228,7 +228,7 @@
 <script>
   /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
   /* ขึ้นเลขนี้ทุกครั้งที่แก้ไฟล์ จะได้รู้ว่าเครื่องไหนยังค้างไฟล์เก่าอยู่ */
-  const BUILD = '2026-11-08 a';
+  const BUILD = '2026-11-15 a';
   const LIFF_ID = '2011770140-oH5cwmNX';
   const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
   /* ================================== */
@@ -509,8 +509,7 @@
       const r = await api({ action: 'leavePending' });
       if (!r.ok) throw new Error(r.error);
       lvPending = r;
-      if (!r.items.length) { $('adminList').innerHTML = '<div class="card msg">✅ ไม่มีคำขอรออนุมัติ</div>'; return; }
-      $('adminList').innerHTML = '<div class="br">' + r.items.map(it =>
+      const waiting = r.items.length ? '<div class="br">' + r.items.map(it =>
         '<div class="emp"><div><b>' + esc(it.name) + '</b> · ' + esc(it.branch) +
           '<br>' + esc(it.date) + ' · ' + esc(it.type) + (it.duration === 'ครึ่งวัน' ? ' (ครึ่งวัน)' : '') +
           '<br><small class="msg">' + esc(it.reason) + '</small>' +
@@ -520,7 +519,39 @@
             it.quotaUsed + '/' + it.quota + ' วัน' +
             (it.over ? ' — เกินโควตา หัก ' + baht(it.cost) + ' บาท' : '') + '</small>' +
         '</div><div class="st"><a href="#" class="ok" data-ok="' + esc(it.id) + '">อนุมัติ</a>' +
-          '<small><a href="#" class="bad" data-no="' + esc(it.id) + '">ไม่อนุมัติ</a></small></div></div>').join('') + '</div>';
+          '<small><a href="#" class="bad" data-no="' + esc(it.id) + '">ไม่อนุมัติ</a></small></div></div>').join('') + '</div>'
+        : '<div class="card msg">✅ ไม่มีคำขอรออนุมัติ</div>';
+
+      /* ใบที่อนุมัติไปแล้ว แสดงไว้ให้ยกเลิกได้ ย่อไว้ก่อนเพื่อไม่ให้บังของที่ต้องตัดสินใจวันนี้ */
+      const ap = r.approved || [];
+      const done = !ap.length ? '' :
+        '<details class="br" style="padding:12px 14px;margin-top:10px"><summary>'
+        + '<b>อนุมัติแล้ว ' + ap.length + ' ใบ</b>'
+        + '<br><small class="msg">กดเพื่อดูและยกเลิกได้</small></summary>'
+        + '<div style="margin-top:10px">' + ap.map(it =>
+          '<div class="emp"><div><b>' + esc(it.name) + '</b> · ' + esc(it.branch) +
+            '<br>' + esc(it.date) + ' · ' + esc(it.type) +
+            (it.duration === 'ครึ่งวัน' ? ' (ครึ่งวัน)' : '') +
+            (it.past ? ' <small class="msg">(ผ่านมาแล้ว)</small>' : '') +
+            '<br><small class="msg">' + esc(it.reason) + '</small></div>' +
+          '<div class="st"><small><a href="#" class="bad" data-rv="' + esc(it.id) + '">ยกเลิก</a></small>'
+          + '</div></div>').join('') + '</div></details>';
+
+      $('adminList').innerHTML = waiting + done;
+
+      $('adminList').querySelectorAll('[data-rv]').forEach(a => a.onclick = async ev => {
+        ev.preventDefault();
+        const reason = (prompt('เหตุผลที่ยกเลิกวันลาใบนี้ (ต้องระบุ)') || '').trim();
+        if (!reason) return;
+        a.textContent = 'กำลังยกเลิก…';
+        try {
+          const d = await api({ action: 'leaveRevoke', id: a.dataset.rv, reason: reason });
+          if (!d.ok) throw new Error(d.error);
+          setStatus('ยกเลิกแล้ว แจ้งพนักงานทางไลน์เรียบร้อย');
+        } catch (e) { setStatus(e.message, true); }
+        await renderApprove();
+      });
+
       $('adminList').querySelectorAll('[data-ok],[data-no]').forEach(a => a.onclick = async ev => {
         ev.preventDefault();
         const approve = a.hasAttribute('data-ok');
