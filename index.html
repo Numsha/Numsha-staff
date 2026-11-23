@@ -228,7 +228,7 @@
 <script>
   /* ===== แก้ 2 บรรทัดนี้เท่านั้น ===== */
   /* ขึ้นเลขนี้ทุกครั้งที่แก้ไฟล์ จะได้รู้ว่าเครื่องไหนยังค้างไฟล์เก่าอยู่ */
-  const BUILD = '2026-11-18 a';
+  const BUILD = '2026-11-23 a';
   const LIFF_ID = '2011770140-oH5cwmNX';
   const API_URL = 'https://script.google.com/macros/s/AKfycbwlxrrRd-NB1Lq1Q5LF6U3eBx52T7db5FPagwKJ6kH6gngVfOQ2MNl0XhKTVfPLW-CMvg/exec';
   /* ================================== */
@@ -306,6 +306,15 @@
     setStatus('');
     if (!s.ok) throw new Error(s.error);
     me = s;
+    /* โชว์เวอร์ชันของหลังบ้านคู่กับของหน้าเว็บ
+       ถ้าสองเลขไม่เท่ากัน แปลว่าอัปเดตไปแค่ฝั่งเดียว ยังไม่ได้ deploy หรือยังไม่ได้อัปโหลด */
+    if (s.serverVersion) {
+      const same = s.serverVersion === BUILD;
+      $('build').textContent = 'เวอร์ชัน ' + BUILD + ' · หลังบ้าน ' + s.serverVersion
+        + (same ? '' : '  ⚠️ ไม่ตรงกัน');
+      $('build').style.opacity = same ? '.45' : '1';
+      $('build').style.color = same ? '' : 'var(--red)';
+    }
     if (!s.registered) {
       if (afterAction) {
         setStatus('บันทึกเวลาเรียบร้อยแล้ว แต่ระบบอ่านข้อมูลพนักงานไม่เจอชั่วคราว '
@@ -818,6 +827,8 @@
       if (e.lateMin) flags.push('สายรวม ' + e.lateMin + ' นาที');
       if (e.noOut) flags.push('ลืมเช็คเอาท์ ' + e.noOut + ' วัน');
       if (e.earlyOut) flags.push('ออกก่อน ' + e.earlyOut + ' วัน');
+      if (e.outArea) flags.push('นอกพื้นที่ ' + e.outArea + ' วัน');
+      if (e.otherBranch) flags.push('เช็คอินสาขาอื่น ' + e.otherBranch + ' วัน');
 
       const detail = '<div class="detail">'
         + (e.lateList.length ? '<div><b>วันที่สาย</b> ' + esc(e.lateList.join(' · ')) + '</div>' : '')
